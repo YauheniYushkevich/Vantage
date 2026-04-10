@@ -1,0 +1,37 @@
+name: PR Size Policy
+on:
+pull_request:
+types: [opened, synchronize, reopened, ready_for_review]
+jobs:
+pr-size:
+runs-on: ubuntu-latest
+permissions:
+pull-requests: read
+steps:
+- name: Fetch PR files
+uses: actions/github-script@v7
+with:
+script: |
+const owner = context.repo.owner;
+const repo = context.repo.repo;
+const pull_number = context.payload.pull_request.number;
+const MAX_SHOULD = 500;
+const MAX_MUST_NOT = 1000;
+let additions = 0, deletions = 0, filesChanged = 0;
+for await (const resp of github.paginate.iterator(
+github.rest.pulls.listFiles,
+{ owner, repo, pull_number, per_page: 100 }
+)) {
+for (const f of resp.data) {
+additions += f.additions || 0;
+deletions += f.deletions || 0;
+filesChanged += 1;
+}
+}
+const changedLines = additions + deletions;
+core.info(`Files: ${filesChanged}, changed lines: ${changedLines} (+${additions}/-${deletions})`);
+if (changedLines > MAX_MUST_NOT) {
+core.setFailed(`PR too large: ${changedLines} changed lines (> ${MAX_MUST_NOT}). Split the PR or request an approved exception (see standard §6.6.3).`);
+} else if (changedLines > MAX_SHOULD) {
+core.warning(`Large PR: ${changedLines} changed lines (> ${MAX_SHOULD}). Add justification + 'How to review' and ensure 2 approvals.`);
+}
