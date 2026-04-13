@@ -103,4 +103,3 @@ jobs:
 
             // Small PR → always allowed
             core.info("✅ Pull Request Größe ist akzeptabel.");
-``
