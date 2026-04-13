@@ -30,7 +30,7 @@ jobs:
 
       - name: Check PR size limit
         run: |
-          MAX_SIZE=800    # ✅ Лимит строк (можешь изменить)
+          MAX_SIZE=50    # ✅ Лимит строк (можешь изменить)
           echo "Additions: ${{ steps.pr.outputs.additions }}"
           echo "Deletions: ${{ steps.pr.outputs.deletions }}"
           echo "Total changed: ${{ steps.pr.outputs.total }}"
