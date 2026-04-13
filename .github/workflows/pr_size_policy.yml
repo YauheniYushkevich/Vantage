@@ -12,17 +12,26 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Fetch PR files
+      - name: Analyze PR
+        id: analyze
         uses: actions/github-script@v7
         with:
           script: |
+            // === Configuration constants ===
+            // MAX_SHOULD - threshold where PR is considered "large"
+            // MAX_MUST_NOT - absolute limit, PR cannot be merged
+            // MIN_LARGE_PR_APPROVALS - required number of approvals for large PRs
+            // REQUIRED_TEXT - mandatory text block in PR description
+            const MAX_SHOULD = 500;
+            const MAX_MUST_NOT = 1000;
+            const MIN_LARGE_PR_APPROVALS = 2;
+            const REQUIRED_TEXT = "## Großer Pull Request";
+
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pull_number = context.payload.pull_request.number;
 
-            const MAX_SHOULD = 500;
-            const MAX_MUST_NOT = 1000;
-
+            // === 1. Fetch file changes ===
             let additions = 0;
             let deletions = 0;
             let filesChanged = 0;
@@ -40,16 +49,58 @@ jobs:
 
             const changedLines = additions + deletions;
 
-            core.info(`Files: ${filesChanged}, changed lines: ${changedLines} (+${additions}/-${deletions})`);
+            // === 2. Fetch PR description ===
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number });
+            const body = pr.data.body || "";
 
+            // === 3. Fetch approvals ===
+            const reviewsResp = await github.rest.pulls.listReviews({ owner, repo, pull_number });
+
+            const approvedUsers = new Set(
+              reviewsResp.data
+                .filter(r => r.state === "APPROVED")
+                .map(r => r.user.login)
+            );
+            const approvals = approvedUsers.size;
+
+            // === Logging details ===
+            core.info(`Files: ${filesChanged}`);
+            core.info(`Changed lines: ${changedLines} (+${additions}/-${deletions})`);
+            core.info(`Approvals: ${approvals}`);
+            core.info(`Required text present: ${body.includes(REQUIRED_TEXT)}`);
+
+            // === 4. Validation rules ===
+
+            // Too large PR → block merge completely
             if (changedLines > MAX_MUST_NOT) {
               core.setFailed(
-                `PR too large: ${changedLines} changed lines (> ${MAX_MUST_NOT}). ` +
-                `Split the PR or request an approved exception (see standard §6.6.3).`
+                `❌ Pull Request ist zu groß: ${changedLines} geänderte Zeilen (>${MAX_MUST_NOT}). Bitte aufteilen oder Ausnahme genehmigen lassen.`
               );
-            } else if (changedLines > MAX_SHOULD) {
-              core.warning(
-                `Large PR: ${changedLines} changed lines (> ${MAX_SHOULD}). ` +
-                `Add justification + 'How to review' and ensure 2 approvals.`
-              );
+              return;
             }
+
+            // Large PR requiring extra checks
+            if (changedLines > MAX_SHOULD) {
+              core.warning(`⚠ Großer Pull Request: ${changedLines} geänderte Zeilen (>${MAX_SHOULD}).`);
+
+              if (approvals < MIN_LARGE_PR_APPROVALS) {
+                core.setFailed(
+                  `❌ Großer Pull Request benötigt mindestens ${MIN_LARGE_PR_APPROVALS} Genehmigungen, aber nur ${approvals} vorhanden.`
+                );
+                return;
+              }
+
+              if (!body.includes(REQUIRED_TEXT)) {
+                core.setFailed(
+                  `❌ Großer Pull Request erfordert den Abschnitt "${REQUIRED_TEXT}" in der Beschreibung.`
+                );
+                return;
+              }
+
+              core.info("✅ Anforderungen für großen PR erfüllt.");
+              return;
+            }
+
+            // Small PR → always allowed
+            core.info("✅ Pull Request Größe ist akzeptabel.");
+``
