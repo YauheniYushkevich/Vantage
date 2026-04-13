@@ -74,30 +74,35 @@ jobs:
             // Too large PR → block merge completely
             if (changedLines > MAX_MUST_NOT) {
               core.setFailed(
-                `❌ Pull Request ist zu groß: ${changedLines} geänderte Zeilen (>${MAX_MUST_NOT}). Bitte aufteilen oder Ausnahme genehmigen lassen.`
+                `❌ Pull Request ist zu groß: ${changedLines} geänderte Zeilen (> ${MAX_MUST_NOT}). Bitte aufteilen oder Ausnahme genehmigen lassen.`
               );
               return;
             }
 
             // Large PR requiring extra checks
             if (changedLines > MAX_SHOULD) {
-              core.warning(`⚠ Großer Pull Request: ${changedLines} geänderte Zeilen (>${MAX_SHOULD}).`);
+              core.warning(`⚠ Großer Pull Request: ${changedLines} geänderte Zeilen (> ${MAX_SHOULD}).`);
+              
+              let hasErrors = false;
 
               if (approvals < MIN_LARGE_PR_APPROVALS) {
                 core.setFailed(
                   `❌ Großer Pull Request benötigt mindestens ${MIN_LARGE_PR_APPROVALS} Genehmigungen, aber nur ${approvals} vorhanden.`
                 );
-                return;
+                hasErrors = true;
               }
 
               if (!body.includes(REQUIRED_TEXT)) {
                 core.setFailed(
                   `❌ Großer Pull Request erfordert den Abschnitt "${REQUIRED_TEXT}" in der Beschreibung.`
                 );
-                return;
+                hasErrors = true;
               }
 
-              core.info("✅ Anforderungen für großen PR erfüllt.");
+              if (!hasErrors) {
+                core.info("✅ Anforderungen für großen PR erfüllt.");
+              }
+
               return;
             }
 
